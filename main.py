@@ -738,14 +738,32 @@ def load_json_analyses(
         severity = None
         if isinstance(audit, dict):
             severity = audit.get("severity_score", None)
-            # Also try to extract from content if not a top-level key
-            if severity is None:
-                audit_content = audit.get("content", "")
-                score_match = re.search(
-                    r"Score:\s*(\d+)(?:/10)?", audit_content, re.IGNORECASE
+            audit_content = audit.get("content", "")
+            if audit_content:
+                # Override with Overall Lapse Severity Score if present
+                overall_match = re.search(
+                    r"Overall Lapse Severity Score.*?\n\s*\*\*Score:\s*(\d+)",
+                    audit_content,
+                    re.IGNORECASE | re.DOTALL,
                 )
-                if score_match:
-                    severity = int(score_match.group(1))
+                if overall_match:
+                    severity = int(overall_match.group(1))
+                else:
+                    lapse_match = re.search(
+                        r"Lapse Severity Score:\s*(?:\*\*)?(\d+)",
+                        audit_content,
+                        re.IGNORECASE,
+                    )
+                    if lapse_match:
+                        severity = int(lapse_match.group(1))
+                    elif severity is None:
+                        all_scores = re.findall(
+                            r"(?:^|\n)[^\n]*?Score:\s*(?:\*\*)?(\d+)",
+                            audit_content,
+                            re.IGNORECASE,
+                        )
+                        if all_scores:
+                            severity = int(all_scores[-1])
 
         summary_snippet = (
             legal_summary[:200] + "..." if len(legal_summary) > 200 else legal_summary
@@ -822,6 +840,31 @@ def load_analysis_list() -> dict:
         # Severity score
         audit = sections.get("Investigation Quality Audit", {})
         severity = audit.get("severity_score", None)
+        audit_content = audit.get("content", "") if isinstance(audit, dict) else ""
+        if audit_content:
+            overall_match = re.search(
+                r"Overall Lapse Severity Score.*?\n\s*\*\*Score:\s*(\d+)",
+                audit_content,
+                re.IGNORECASE | re.DOTALL,
+            )
+            if overall_match:
+                severity = int(overall_match.group(1))
+            else:
+                lapse_match = re.search(
+                    r"Lapse Severity Score:\s*(?:\*\*)?(\d+)",
+                    audit_content,
+                    re.IGNORECASE,
+                )
+                if lapse_match:
+                    severity = int(lapse_match.group(1))
+                elif severity is None:
+                    all_scores = re.findall(
+                        r"(?:^|\n)[^\n]*?Score:\s*(?:\*\*)?(\d+)",
+                        audit_content,
+                        re.IGNORECASE,
+                    )
+                    if all_scores:
+                        severity = int(all_scores[-1])
         if severity is not None:
             severity_scores.append(severity)
 
@@ -992,11 +1035,35 @@ def load_json_analysis_detail(fpath: str, slug: str) -> dict | None:
         else ""
     )
 
-    # Try extracting severity from content if not a top-level key
-    if not severity_score and audit_content:
-        score_match = re.search(r"Score:\s*(\d+)(?:/10)?", audit_content, re.IGNORECASE)
-        if score_match:
-            severity_score = int(score_match.group(1))
+    # Always try to extract the OVERALL severity score from content body
+    # because the top-level key can sometimes be a department sub-score
+    if audit_content:
+        # First, try to find the overall score (after "Overall Lapse Severity Score" heading)
+        overall_match = re.search(
+            r"Overall Lapse Severity Score.*?\n\s*\*\*Score:\s*(\d+)",
+            audit_content,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if overall_match:
+            severity_score = int(overall_match.group(1))
+        else:
+            # Try "Lapse Severity Score: N" pattern (always overrides top-level)
+            lapse_match = re.search(
+                r"Lapse Severity Score:\s*(?:\*\*)?(\d+)",
+                audit_content,
+                re.IGNORECASE,
+            )
+            if lapse_match:
+                severity_score = int(lapse_match.group(1))
+            elif not severity_score:
+                # Fallback: find last "Score: N" line (the overall is usually at the end)
+                all_scores = re.findall(
+                    r"(?:^|\n)[^\n]*?Score:\s*(?:\*\*)?(\d+)",
+                    audit_content,
+                    re.IGNORECASE,
+                )
+                if all_scores:
+                    severity_score = int(all_scores[-1])
 
     audit_subsections = []
     if audit_content:
@@ -1008,14 +1075,28 @@ def load_json_analysis_detail(fpath: str, slug: str) -> dict | None:
             if not line or line == "---":
                 continue
 
+            # Skip score line so it doesn't become a header
+            if (
+                re.search(r"Lapse Severity Score", line, re.IGNORECASE)
+                or re.search(r"^\s*(?:\*\*)?Score:", line, re.IGNORECASE)
+                or "Observations/Lapses" in line
+            ):
+                continue
+
             # Match strict markdown headings like `### Heading` or `## **1. Department Lapses**`
             heading_match = re.match(r"^#{2,4}\s+(?:\*\*)?(.*?)(?:\*\*)?:?\s*$", line)
             alt_heading_match = re.match(r"^\*\*([^*]+)\*\*:?\s*$", line)
 
+            if alt_heading_match and (
+                "Score:" in line
+                or len(line) > 60
+                or "Observations" in line
+                or "Rationale" in line
+            ):
+                alt_heading_match = None
+
             if heading_match or alt_heading_match:
                 if current_heading:
-                    if not current_items:
-                        current_items.append({"title": "", "detail": ""})
                     audit_subsections.append(
                         {"heading": current_heading, "items": current_items}
                     )
@@ -1028,6 +1109,7 @@ def load_json_analysis_detail(fpath: str, slug: str) -> dict | None:
                     .strip()
                     .rstrip(":")
                 )
+                current_heading = re.sub(r"^\*\*|\*\*$", "", current_heading).strip()
                 current_items = []
             else:
                 bullet_bold_match = re.match(
@@ -1060,8 +1142,6 @@ def load_json_analysis_detail(fpath: str, slug: str) -> dict | None:
                             current_items.append({"title": "", "detail": line})
 
         if current_heading:
-            if not current_items:
-                current_items.append({"title": "", "detail": ""})
             audit_subsections.append(
                 {"heading": current_heading, "items": current_items}
             )
@@ -1230,6 +1310,36 @@ def load_analysis_detail(slug: str) -> dict | None:
     severity_score = audit_section.get("severity_score", 0)
     score_justification = audit_section.get("score_justification", "")
 
+    # Always try to extract the OVERALL severity score from content body
+    # because the top-level key can sometimes be a department sub-score
+    if audit_content:
+        # First, try to find the overall score (after "Overall Lapse Severity Score" heading)
+        overall_match = re.search(
+            r"Overall Lapse Severity Score.*?\n\s*\*\*Score:\s*(\d+)",
+            audit_content,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if overall_match:
+            severity_score = int(overall_match.group(1))
+        else:
+            # Try "Lapse Severity Score: N" pattern (always overrides top-level)
+            lapse_match = re.search(
+                r"Lapse Severity Score:\s*(?:\*\*)?(\d+)",
+                audit_content,
+                re.IGNORECASE,
+            )
+            if lapse_match:
+                severity_score = int(lapse_match.group(1))
+            elif not severity_score:
+                # Fallback: find last "Score: N" line (the overall is usually at the end)
+                all_scores = re.findall(
+                    r"(?:^|\n)[^\n]*?Score:\s*(?:\*\*)?(\d+)",
+                    audit_content,
+                    re.IGNORECASE,
+                )
+                if all_scores:
+                    severity_score = int(all_scores[-1])
+
     # Parse audit into sub-sections
     audit_subsections = []
     if audit_content:
@@ -1241,14 +1351,28 @@ def load_analysis_detail(slug: str) -> dict | None:
             if not line or line == "---":
                 continue
 
+            # Skip score line so it doesn't become a header
+            if (
+                re.search(r"Lapse Severity Score", line, re.IGNORECASE)
+                or re.search(r"^\s*(?:\*\*)?Score:", line, re.IGNORECASE)
+                or "Observations/Lapses" in line
+            ):
+                continue
+
             # Match either `### Heading` or `## **1. Lapses**` or `**Heading**: `
             heading_match = re.match(r"^#{2,4}\s+(?:\*\*)?(.*?)(?:\*\*)?:?\s*$", line)
             alt_heading_match = re.match(r"^\*\*([^*]+)\*\*:?\s*$", line)
 
+            if alt_heading_match and (
+                "Score:" in line
+                or len(line) > 60
+                or "Observations" in line
+                or "Rationale" in line
+            ):
+                alt_heading_match = None
+
             if heading_match or alt_heading_match:
                 if current_heading:
-                    if not current_items:
-                        current_items.append({"title": "", "detail": ""})
                     audit_subsections.append(
                         {"heading": current_heading, "items": current_items}
                     )
@@ -1256,6 +1380,7 @@ def load_analysis_detail(slug: str) -> dict | None:
                     current_heading = heading_match.group(1).strip().rstrip(":")
                 else:
                     current_heading = alt_heading_match.group(1).strip().rstrip(":")
+                current_heading = re.sub(r"^\*\*|\*\*$", "", current_heading).strip()
                 current_items = []
             else:
                 bullet_bold_match = re.match(
@@ -1288,8 +1413,6 @@ def load_analysis_detail(slug: str) -> dict | None:
                             current_items.append({"title": "", "detail": line})
 
         if current_heading:
-            if not current_items:
-                current_items.append({"title": "", "detail": ""})
             audit_subsections.append(
                 {"heading": current_heading, "items": current_items}
             )

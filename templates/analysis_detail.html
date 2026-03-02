@@ -759,10 +759,10 @@
                         </span>
                     </div>
 
-                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                    <div class="columns-1 xl:columns-2 gap-5">
                         {% for sub in failure_sections %}
                         <div
-                            class="lapse-card bg-white dark:bg-slate-900 rounded-xl border-2 border-red-200 dark:border-red-900/50 overflow-hidden shadow-sm hover:shadow-lg transition-all">
+                            class="lapse-card bg-white dark:bg-slate-900 rounded-xl border border-red-200 dark:border-red-900/50 shadow-sm hover:shadow-md transition-all h-fit break-inside-avoid mb-5">
                             <!-- Department Header -->
                             <div class="p-4 flex items-center gap-3
                                 {% if 'Police' in sub.heading or 'Investigative' in sub.heading %}bg-gradient-to-r from-blue-50 to-slate-50 dark:from-blue-900/10 dark:to-transparent
