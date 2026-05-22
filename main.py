@@ -1044,6 +1044,28 @@ def load_json_analysis_detail(fpath: str, slug: str) -> dict | None:
                 title = k.replace("_", " ").title()
                 legal_items.append({"title": title, "content": v})
 
+        # Extract Exhibits from prosecution case summary for V3
+        prosecution_case = v3_summary.get("prosecution_plaintiffs_case", "")
+        if prosecution_case:
+            # Look for patterns like "Ex.P-1", "Ex.P-12", "Ex.P-1 to Ex.P-10"
+            exhibit_matches = re.finditer(r"(Ex\.P-\d+)(?:\s*(?:to|and|,)\s*(Ex\.P-\d+))?", prosecution_case)
+            exhibits_found = set()
+            for match in exhibit_matches:
+                exhibits_found.add(match.group(1))
+                if match.group(2):
+                    exhibits_found.add(match.group(2))
+            
+            # If we found exhibits, add them to the witnesses list
+            if exhibits_found:
+                sorted_exhibits = sorted(list(exhibits_found), key=lambda x: int(re.search(r"\d+", x).group()) if re.search(r"\d+", x) else 0)
+                for ex in sorted_exhibits:
+                    witnesses.append({
+                        "Designation": ex,
+                        "Full Name": "Exhibit Document",
+                        "Role": "Evidence",
+                        "Key Testimony": f"Mentioned in prosecution case summary as marked exhibit {ex}."
+                    })
+
         # Taxonomy
         v3_class = data.get("classification", {})
         taxonomy_items = []
