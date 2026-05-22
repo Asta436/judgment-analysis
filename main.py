@@ -14,6 +14,7 @@ try:
 except ImportError:
     from services import analytics
 
+
 try:
     from app.auth import (
         authenticate_user,
