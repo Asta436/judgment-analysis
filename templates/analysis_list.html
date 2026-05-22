@@ -213,6 +213,12 @@
             <button onclick="filterSource('NPA')" id="tab-NPA"
                 class="source-tab px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all"
                 data-tab="NPA">NPA</button>
+            <button onclick="filterSource('V2')" id="tab-V2"
+                class="source-tab px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all"
+                data-tab="V2">V2</button>
+            <button onclick="filterSource('V3')" id="tab-V3"
+                class="source-tab px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all"
+                data-tab="V3">V3</button>
         </section>
 
         <!-- Analysis Cards Grid -->
@@ -238,8 +244,10 @@
                                     </span>
                                     <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest
                                         {% if a.source == 'NPA' %}bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400
+                                        {% elif a.source == 'V2' %}bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400
+                                        {% elif a.source == 'V3' %}bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-400
                                         {% else %}bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400{% endif %}">
-                                        <span class="material-icons mr-0.5" style="font-size:11px;">{% if a.source == 'NPA' %}policy{% else %}description{% endif %}</span>
+                                        <span class="material-icons mr-0.5" style="font-size:11px;">{% if a.source == 'NPA' %}policy{% elif a.source == 'V2' %}api{% elif a.source == 'V3' %}science{% else %}description{% endif %}</span>
                                         {{ a.source }}
                                     </span>
                                     {% if a.severity_score is not none %}

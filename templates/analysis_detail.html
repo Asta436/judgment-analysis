@@ -198,8 +198,11 @@
                 </span>
                 <span class="inline-flex items-center px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest
                     {% if source == 'NPA' %}bg-purple-50 text-purple-700
+                    {% elif source == 'V2' %}bg-cyan-50 text-cyan-700
+                    {% elif source == 'V3' %}bg-fuchsia-50 text-fuchsia-700
                     {% else %}bg-indigo-50 text-indigo-700{% endif %}">
-                    <span class="material-icons mr-0.5" style="font-size:11px;">{% if source == 'NPA' %}policy{% else
+                    <span class="material-icons mr-0.5" style="font-size:11px;">{% if source == 'NPA' %}policy{% elif
+                        source == 'V2' %}api{% elif source == 'V3' %}science{% else
                         %}description{% endif %}</span>
                     {{ source }}
                 </span>
