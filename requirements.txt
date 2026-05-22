@@ -5,3 +5,5 @@ python-multipart
 itsdangerous
 bcrypt
 aiofiles
+pydantic
+starlette
